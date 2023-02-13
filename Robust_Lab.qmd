@@ -6,6 +6,17 @@ execute:
   message: false
 ---
 
+---
+title: "Robust Methods Lab"
+format: html
+editor: visual
+execute: 
+  message: false
+  warning: false
+  echo: 
+  code
+---
+
 # Lab 1-Robust Methods
 
 ## Instructions
@@ -30,6 +41,8 @@ execute:
     library(data.table) # fread 
     library(infer) # sample_rep_n function
     library(palmerpenguins) # penguins dataset
+    library(broom)
+    library(performance)
 
 
     ```
@@ -46,9 +59,56 @@ Use the `stars` data in `robustbase`. This data looks at the relationship betwee
 
     a\. Plot the data and describe the pattern seen. What is Pearson's *r*?
 
+    ```{r}
+    ggplot(stars, aes(log.Te, log.light)) + geom_point(shape = 21, colour = "black", fill = "orange", size = 3, alpha = 1/2) + geom_smooth(method = 'lm') + theme_linedraw()
+    print(cor(stars$log.Te, stars$log.light))
+
+    #It looks negatively correlated.
+    ```
+
     b\. Re-run the correlation, but this time use the winsorized r (20%). Do this manually and then with the correlation::correlation function from `easystats`.
 
+    ```{r}
+    #Manual
+    take_off_stars <- nrow(stars)*.2
+    take_off_stars
+    #Remove 9 from front and 9 from back
+    ##Start with temp
+    stars_df <- stars[order(stars$log.Te),]
+    stars_df1 <- stars_df[-c(1:9, 39:47),]
+    ##Then light
+    stars_df2 <- stars_df1[order(stars_df1$log.light),]
+    stars_df3 <- stars_df2[-c(1:9, 39:47),]
+
+    stars_correl_1 <- cor(stars_df3$log.Te, stars_df3$log.light)
+    stars_correl_1
+
+    ##Start with light
+    stars_df4 <- stars[order(stars$log.light),]
+    stars_df5 <- stars_df4[-c(1:9, 39:47),]
+    ##Then temp
+    stars_df6 <- stars_df5[order(stars_df1$log.light),]
+    stars_df7 <- stars_df6[-c(1:9, 39:47),]
+
+    stars_correl_2 <- cor(stars_df7$log.Te, stars_df7$log.light)
+    stars_correl_2
+
+    #Take the average of the two correlations
+    stars_correl_trim <- (stars_correl_1 + stars_correl_2)/2
+    print(stars_correl_trim)
+
+    ```
+
+    ```{r}
+    #Using easystats
+    correlation::correlation(stars, winsorize = .2)
+
+    #20% winsorized correlation = .34
+    ```
+
     c\. Compare the correlations.
+
+    The non-winsorized correlation is negative, but the winsorized correlation is positive.
 
 ## Bootstrapping and Permutations
 
@@ -56,11 +116,64 @@ Use the `stars` data in `robustbase`. This data looks at the relationship betwee
 
     a\. Bootstrap the mean (using the `boot` package) and plot the histogram with `ggplot2`
 
+    ```{r}
+    dataQ2 <- c(8.453532, 10.025041, 11.495339, 9.367600, 8.333229, 9.788753, 10.883344, 10.543059, 9.869095, 10.799819)
+
+    mean_fun = function(dataQ2, indices) {
+      return(mean(dataQ2[indices]))
+    }
+      
+      results = boot(dataQ2, mean_fun, R=1000)
+      
+    means=results$t
+    results
+
+    hist(means)
+    ```
+
     b\. Bootstrap the median (using the `boot` package) and plot the histogram with `ggplot2`
+
+    ```{r}
+    dataQ2 <- c(8.453532, 10.025041, 11.495339, 9.367600, 8.333229, 9.788753, 10.883344, 10.543059, 9.869095, 10.799819)
+
+    med_fun = function(dataQ2, indices) {
+      return(median(dataQ2[indices]))
+    }
+      
+      results2 = boot(dataQ2, med_fun, R=1000)
+      
+    medians=results2$t
+    results2
+
+    hist(medians)
+    ```
 
     c\. For the mean bootstraps, plot the 95% confidence intervals (percentile and bca) ) along with the mean. Use `geom_vline annotate` to mark the lines noting what they represent.
 
+    ```{r}
+    results_ci = boot.ci(results, type = "perc", R=10000)
+    results_ci
+
+    results_ci_bca = boot.ci(results, type = "bca", R=1000)
+    results_ci_bca
+
+    hist(means)
+    abline(v=c(9.039, 10.531, 9.254, 10.493), col=c("blue", "blue", "red", "red"), lty=c(1,2, 1,2), lwd=c(1, 1, 3,3))
+
+    ```
+
     d\. For the median bootstraps, plot the 95% confidence intervals (Percentile and BCa). Use `geom_vline and annotate` to mark the lines noting what they represent.
+
+    ```{r}
+    results_ci2 = boot.ci(results2, type = "perc", R=10000)
+    results_ci2
+
+    results_ci_bca2 = boot.ci(results2, type = "bca", R=1000)
+    results_ci_bca2
+
+    hist(medians)
+    abline(v=c(9.121, 10.800, 8.911, 10.713), col=c("blue", "blue", "red", "red"), lty=c(1,2, 1,2), lwd=c(1, 1, 3,3))
+    ```
 
 3.  You want to test whether the following paired samples are significantly different from one another: pre = \[22,25,17,24,16,29,20,23,19,20\], post = \[18,21,16,22,19,24,17,21,23,18\]. Often researchers would run a paired sampled t-test, but you are concerned the data does not follow a normal distribution.
 
@@ -74,11 +187,62 @@ Use the `stars` data in `robustbase`. This data looks at the relationship betwee
 
     f\. Plot bootstrap mean along with 95% CIs (with `ggplot2`). Use annotate to note what the vertical lines represent.
 
+    ```{r}
+    #a
+    pre <- c(22,25,17,24,16,29,20,23,19,20)
+    post <- c(18,21,16,22,19,24,17,21,23,18)
+    dataQ3 <- data.frame(pre, post)
+    pdiff0 <- (dataQ3$post - dataQ3$pre)
+
+    #b
+    Xpdiff0 <-mean(pdiff0)
+    Xpdiff0
+
+    #d
+    mean_fun1 = function(pdiff0, indices) {
+      return(mean(pdiff0[indices])) 
+    results3 = boot(pdiff0, mean_fun1, R=1000) }
+    pdiff1=results3$t
+    results3
+    hist(pdiff1)
+
+    #e
+    results_ci_bcaQ3 = boot.ci(results3, type = "bca", R=1000)
+    results_ci_bcaQ3
+    #Inference: The CI includes zero, so there is not a statistically significant difference between the two groups.
+
+    #f
+    hist(pdiff1)
+    abline(v=c(-3.100, .464), col=c("blue", "blue"), lty=c(1,2, 1,2), lwd=c(1, 1, 3,3))
+    ```
+
 4.  Pepper Joe measured the length and heat of 85 chili peppers. He wants to know if smaller peppers are hotter than longer peppers.
 
     ```{r}
     #read data.table to read in
-    chili<- read.delim("/Users/jasongeller/Documents/03-Robust_Methods/data/chillis.csv")
+    chili<- read.delim("https://raw.githubusercontent.com/jgeller112/psy504-advanced-stats/main/slides/03-Robust_Methods/data/chillis.csv")
+    ```
+
+    ```{r}
+
+
+
+
+    mean_fun_chili = function(chili, indices) {
+      return(mean(chili[indices]))
+    }
+      
+    results_chili = boot(chili$HEAT, mean_fun_chili, R=1000)
+      
+    means_chili=results$t
+    results
+
+    hist(means_chili)
+
+    results_ci_bca_chili = boot.ci(results, type = "bca", R=1000)
+    results_ci_bca_chili
+
+    #95% does not include zero.  Size of chili is statistically signficantly related to its hotness.
     ```
 
 5.  Some species display sexual size dimorphism -- in which one sex is on average larger than the other. Such a pattern can tell us about the species' ecology and mating habits. Do penguins display this sex difference in size? Let's just look at a subset of the palmerpenguins data set, which we'll call `my_penguins`.
@@ -93,13 +257,79 @@ Use the `stars` data in `robustbase`. This data looks at the relationship betwee
 
 a\. Visualize body size by sex
 
+```{r}
+ggplot(data = my_penguins, aes(sex, body_mass_g)) +geom_point()
+```
+
 b\. Calculate the original mean difference between sex
+
+```{r}
+mean_diff <- my_penguins %>%
+  group_by(sex) %>%
+  summarise(mean_group = mean(body_mass_g)) %>%
+  summarise(mean_diff=diff(mean_group)) %>%
+  print()
+```
 
 c\. Permute the group labels (10000x)
 
+```{r}
+df_diff  <- my_penguins          %>% 
+  specify(body_mass_g ~ sex) %>%
+  calculate(stat = "diff in means") %>%
+  print()
+
+ null_distn  <- my_penguins   %>% 
+  specify(body_mass_g ~ sex) %>%
+   hypothesize(null = "independence") %>%
+   generate(reps = 10000, type = "permute") %>%
+   calculate(stat = "diff in means")
+
+```
+
+```{r}
+sample_size <- nrow(my_penguins) # length of dataset
+perm_reps   <- 10000 # number of permutations you want to do
+many.perm <- my_penguins    %>%
+  # this function is in the infer package. What it is doing is creating 
+  rep_sample_n(size = sample_size, replace = FALSE, reps = perm_reps) %>% 
+  mutate(perm_treatment = sample(sex, size = n(), replace = FALSE))  %>%
+  group_by(replicate, perm_treatment)
+many.perm
+
+many.perm.means <- many.perm %>%
+  summarise(mean_group = mean(body_mass_g), .groups = "drop")%>%
+  group_by(replicate)
+many.perm.means
+
+
+many.perm.diffs <- many.perm.means %>%
+  summarise(diff_value = diff(mean_group))
+
+
+
+many.perm.diffs_1 <- many.perm.diffs %>% 
+  mutate(abs_obs_dif = abs(pull(mean_diff)),
+         abs_perm_dif = abs(diff_value),
+         as_or_more_extreme = abs_perm_dif >= abs_obs_dif)
+
+mean(many.perm.diffs_1$as_or_more_extreme)
+
+```
+
 d\. Plot the null-hypothesis distribution (NHD) for the difference
 
+```{r}
+ null_distn %>%
+  visualize() +shade_p_value(obs_stat = df_diff, direction = "two-sided")
+```
+
 e\. Compare the observed mean difference to the NHD (is *p* \< .05?)
+
+```{r}
+#No, it is not.
+
+```
 
 6.  Suppose a replication experiment was conducted to further examine the interaction effect between driving difficulty and conversation difficulty on driving errors in a driving simulator. In the replication, the researchers administered the same three levels of conversation difficulty; (1) control, (2) easy, (3) difficult (C, E, D) but assume that they added a third level of driving difficulty; (1) low, (2) moderate, (3) difficult (L, M, D). Assume the design was completely between subjects and conduct a factorial ANOVA to test the main effects of conversation and driving difficulty as well as the interaction effect. The DV is the number of errors committed in the driving simulator.
 
@@ -107,12 +337,31 @@ e\. Compare the observed mean difference to the NHD (is *p* \< .05?)
     library(tidyverse)
     fac_data<-read_csv("https://raw.githubusercontent.com/jgeller112/psy503-psych_stats/master/static/assignment/data/fact_final.csv")
 
-
     ```
 
     a\. Run a permutation test (ANOVA)
 
+    ```{r}
+    library(permuco)
+    #lmperm() # linear models
+    #aovperm() # anova models
+    #perm.lmer() # lmms
+
+    #Change convo and drive to ordered factors
+    fac_data$convo <- factor(fac_data$convo, ordered = TRUE,
+           levels = c("C", "E", "D"))
+    fac_data$drive <- factor(fac_data$drive, ordered = TRUE,
+           levels = c("L", "M", "D"))
+
+    permuco::aovperm(errors ~ convo * drive,data=fac_data,np=10000)
+
+    ```
+
     b\. How would you follow-up significant effects in this context?
+
+    ```{r}
+    #The interaction is not significant, so there would be no follow-up tests.  However, if the interaction were significant, a simple slopes analysis could be performed to follow up the significant interaction
+    ```
 
 ## Robust Linear Models
 
@@ -128,10 +377,41 @@ df <- data.frame(hours=c(1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4,
 
 a\. Use the lm() function to fit a regression model in R that uses **hours** as the predictor variable and **score** as the response variable
 
+```{r}
+Q7_mdl1 <- lm(score ~ hours, data = df)
+tidy(Q7_mdl1)
+
+```
+
 b\. Interpret the results
 
-c\. Check assumptions and report which ones failed (include plots)
+```{r}
+#The relationship is not statistically significant (p > .05)
+```
+
+c\. Check assumptions and report which assumptions are violated (include stats or plots)
+
+```{r}
+check_model(Q7_mdl1)
+check_normality(Q7_mdl1)
+check_heteroskedasticity(Q7_mdl1)
+check_outliers(Q7_mdl1)
+
+#Homoscedasticity is violated.
+```
 
 d\. Re-run the lm you saved above, but with robust standard errors
 
+```{r}
+library(estimatr)
+m1 <- lm_robust(score ~ hours, data = df, se_type = "HC3")
+tidy(m1)
+```
+
 e\. What differences do you notice between the regular regression and the regression with robust SEs applied?
+
+```{r}
+check_heteroskedasticity(m1)
+
+#While neither test was statistically significant, the regression with robust SEs did not violate the assumption homoscedasticity.  The p-value in the regression with robust SEs was greater than the p value in the regular regression.
+```
